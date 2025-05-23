@@ -24,7 +24,7 @@ def export_markdown_to_file(date, filepath):
     if not logs:
         lines.append("_暂无记录_\n")
     else:
-        for start, end, content, project in logs:
+        for _, start, end, content, project in logs:
             lines.append(f"- {start} - {end}（{project or '-'}）：{content}")
 
     content = "\n".join(lines)
