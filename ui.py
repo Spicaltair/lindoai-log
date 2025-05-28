@@ -6,6 +6,7 @@ import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 from PIL import Image, ImageTk
 from database import insert_log, get_logs_by_date, save_meta, get_meta, get_top_phrases
+from database import delete_phrase  # 确保你有这些函数
 
 log_id_list = []  # 用于保存每条记录的数据库 ID
 
@@ -24,7 +25,8 @@ def export_markdown_to_file(date, filepath):
     if not logs:
         lines.append("_暂无记录_\n")
     else:
-        for _, start, end, content, project in logs:
+        for row in logs:
+            start, end, content, project = row[0], row[1], row[2], row[3]
             lines.append(f"- {start} - {end}（{project or '-'}）：{content}")
 
     content = "\n".join(lines)
@@ -32,10 +34,12 @@ def export_markdown_to_file(date, filepath):
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
 
+
+
 def run_ui():
     root = tb.Window(themename="cosmo")
     root.title("LindoAI Log Recorder")
-    root.geometry("880x720")
+    root.geometry("880x700")
     root.iconbitmap("lindoai.ico")
 
     # Scrollable canvas
@@ -66,7 +70,7 @@ def run_ui():
     top_frame = tk.Frame(scrollable_frame, bg="#f9fafb")
     top_frame.pack(pady=(5, 0))
     tk.Label(top_frame, image=logo, bg="#f9fafb").pack(side=tk.LEFT, padx=(10, 8))
-    tk.Label(top_frame, text="LindoAI 施工日志记录器", font=("Segoe UI", 18, "bold"), bg="#f9fafb").pack(side=tk.LEFT)
+    tk.Label(top_frame, text="LindoAI 工作日志记录器", font=("Segoe UI", 18, "bold"), bg="#f9fafb").pack(side=tk.LEFT)
 
     date_var = tk.StringVar(value=today)
     location_var = tk.StringVar()
@@ -81,10 +85,18 @@ def run_ui():
     end_min_var = tk.StringVar()
 
     weather_options = ["晴", "多云", "阴", "小雨", "中雨", "大雨", "雾", "雪", "风", "雷阵雨"]
+    
+    loc, rec, wea, temp = get_meta(date_var.get())
+    location_var.set(loc or "")
+    recorder_var.set(rec or "")
+    weather_var.set(wea or "")
+    temperature_var.set(temp or "")
+
+    
     with open("projects.xml", "r", encoding="utf-8") as f:
         project_options = [line.strip() for line in f if line.strip()]
 
-    # 限定下拉范围为 08:00 到 18:45
+    # 限定下拉范围为 06:00 到 22:45
     hours = [f"{h:02d}" for h in range(6, 23)]
     minutes = ["00", "15", "30", "45"]
 
@@ -117,7 +129,18 @@ def run_ui():
     tb.Combobox(meta, textvariable=weather_var, values=weather_options, width=10).grid(row=1, column=1, padx=5)
     tb.Label(meta, text="气温℃").grid(row=1, column=2)
     tb.Entry(meta, textvariable=temperature_var, width=10).grid(row=1, column=3, padx=5)
-    tb.Button(meta, text="保存", command=lambda: save_meta(date_var.get(), location_var.get(), recorder_var.get(), weather_var.get(), temperature_var.get()), bootstyle="primary").grid(row=1, column=5, padx=5)
+   
+    def save_meta_info():
+        save_meta(
+            date_var.get(),
+            location_var.get().strip(),
+            recorder_var.get().strip(),
+            weather_var.get().strip(),
+            temperature_var.get().strip()
+        )
+        messagebox.showinfo("保存成功", "基础信息已保存")
+    
+    tb.Button(meta, text="保存", command=save_meta_info, bootstyle="primary").grid(row=1, column=5, padx=5)
 
     entry = tb.LabelFrame(scrollable_frame, text="编辑记录", padding=10, bootstyle="warning")
     entry.pack(fill=tk.X, padx=10, pady=5)
@@ -132,6 +155,7 @@ def run_ui():
     tb.Combobox(entry, textvariable=project_var, values=project_options, width=18).grid(row=1, column=1, columnspan=2, padx=5, sticky="w")
     tb.Label(entry, text="内容").grid(row=2, column=0)
     tb.Entry(entry, textvariable=content_var, width=60).grid(row=2, column=1, columnspan=5, padx=5, pady=4)
+
 
     def move_up():
         idx = log_list.curselection()
@@ -193,11 +217,55 @@ def run_ui():
     tb.Button(btn_frame, text="➕ 添加记录", command=add_log, bootstyle="success").pack(side="left", padx=8)
 
 
-
-    phrase_frame = tb.LabelFrame(scrollable_frame, text="高频内容", padding=10, bootstyle="light")
-    phrase_frame.pack(fill=tk.X, padx=10, pady=5)
+    phrase_frame = tb.LabelFrame(scrollable_frame, text="高频短语（点击填入，右键删除）", padding=10, bootstyle="light")
+    phrase_frame.pack(fill=tk.X, padx=20, pady=5)
     phrase_box = tb.Frame(phrase_frame)
-    phrase_box.pack(fill=tk.X)
+    phrase_box.pack(fill="x", anchor="center", padx=10)
+
+
+    def on_log_double_click(event):
+        selection = log_list.curselection()
+        if not selection:
+            return
+        index = selection[0]
+        text = log_list.get(index).strip()
+        print(f"[双击日志] 清洗后：{repr(text)}")
+
+        try:
+            dash_index = text.find("-")
+            left_paren = text.find("（")
+            right_paren = text.find("）")
+
+            # ✅ 重点修改：取最后一个冒号位置
+            colon_index = text.rfind("：")
+            if colon_index == -1:
+                colon_index = text.rfind(":")
+            if colon_index == -1:
+                raise ValueError("找不到有效冒号")
+
+            start = text[:dash_index].strip()
+            end = text[dash_index + 1:left_paren].strip()
+            project = text[left_paren + 1:right_paren].strip()
+            full_content = text[colon_index + 1:].strip()
+
+            import re
+            sentences = re.split(r"[。！？\.!\?\n]+", full_content)
+            content = sentences[-1].strip() if sentences else full_content
+
+            sh, sm = start.split(":")
+            eh, em = end.split(":")
+
+            start_hour_var.set(sh)
+            start_min_var.set(sm)
+            end_hour_var.set(eh)
+            end_min_var.set(em)
+            content_var.set(content)
+            project_var.set(project)
+        except Exception as e:
+            messagebox.showwarning("解析失败", f"结构不符合要求：\n{text}\n错误详情：{e}")
+
+
+
 
     def refresh_phrases():
         for widget in phrase_box.winfo_children():
@@ -208,16 +276,15 @@ def run_ui():
             row = i // 5
             col = i % 4
             display_text = phrase[:24] + "..." if len(phrase) > 24 else phrase
-            b = tb.Button(phrase_box, text=display_text, width=20, command=lambda p=phrase: content_var.set(p), bootstyle="secondary-outline")
+            b = tb.Button(
+                phrase_box,
+                text=display_text,
+                width=20,
+                command=lambda p=phrase: content_var.set(p),
+                bootstyle="secondary-outline"
+            )
             b.grid(row=row, column=col, padx=4, pady=4, sticky="w")
-
-
-
-    display = tb.LabelFrame(scrollable_frame, text="今日记录", padding=10, bootstyle="default")
-    display.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-    log_list = tk.Listbox(display, font=("Consolas", 10), bg="white")
-    log_list.pack(fill=tk.BOTH, expand=True)
-
+            b.bind("<Button-3>", lambda e, p=phrase: on_right_click(e, p))  # ✅ 增加右键功能
 
     def refresh_logs():
         log_list.delete(0, tk.END)
@@ -228,7 +295,6 @@ def run_ui():
             log_list.insert(tk.END, f"{row[1]} - {row[2]}（{row[4]}）: {row[3]}")
 
 
-
     def export_logs():
         date = date_var.get()
         os.makedirs("log", exist_ok=True)
@@ -236,7 +302,14 @@ def run_ui():
         export_markdown_to_file(date, filepath)
         messagebox.showinfo("导出成功", f"日志已保存到：\n{filepath}")
 
-    tb.Button(scrollable_frame, text="📤 导出为 Markdown", command=export_logs, bootstyle="info").pack(pady=10)
+    display = tb.LabelFrame(scrollable_frame, text="今日记录", padding=10, bootstyle="default")
+    display.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    tb.Button(display, text="📤 导出为 Markdown", command=export_logs, bootstyle="info").pack(pady=10)
+    
+    log_list = tk.Listbox(display, font=("Consolas", 10), bg="white")
+    log_list.pack(fill=tk.BOTH, expand=True)
+    log_list.bind("<Double-1>", on_log_double_click)
 
     loc, rec, wea, temp = get_meta(today)
     location_var.set(loc)

@@ -38,6 +38,7 @@ def init_db():
 def insert_log(date, start_time, end_time, content, project):
     conn = sqlite3.connect("log.db")
     c = conn.cursor()
+    c.execute("INSERT INTO phrases (phrase, count) VALUES (?, 1) ON CONFLICT(phrase) DO UPDATE SET count = count + 1", (content,))
     c.execute("INSERT INTO logs (date, start_time, end_time, content, project) VALUES (?, ?, ?, ?, ?)",
               (date, start_time, end_time, content, project))
     c.execute("INSERT INTO phrases (phrase, count) VALUES (?, 1) ON CONFLICT(phrase) DO UPDATE SET count = count + 1",
@@ -77,3 +78,10 @@ def get_top_phrases(limit=10):
     rows = c.fetchall()
     conn.close()
     return [row[0] for row in rows]
+    
+def delete_phrase(phrase):
+    conn = sqlite3.connect("log.db")
+    c = conn.cursor()
+    c.execute("DELETE FROM phrases WHERE phrase = ?", (phrase,))
+    conn.commit()
+    conn.close()
