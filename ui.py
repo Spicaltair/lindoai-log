@@ -264,6 +264,10 @@ def run_ui():
         except Exception as e:
             messagebox.showwarning("解析失败", f"结构不符合要求：\n{text}\n错误详情：{e}")
 
+    def on_right_click(event, phrase):
+        if messagebox.askyesno("确认删除", f"是否删除短语：{phrase}?"):
+            delete_phrase(phrase)
+            refresh_phrases()
 
 
 
@@ -302,7 +306,7 @@ def run_ui():
         export_markdown_to_file(date, filepath)
         messagebox.showinfo("导出成功", f"日志已保存到：\n{filepath}")
 
-    display = tb.LabelFrame(scrollable_frame, text="今日记录", padding=10, bootstyle="default")
+    display = tb.LabelFrame(scrollable_frame, text="今日记录(双击可编辑）", padding=10, bootstyle="default")
     display.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
     
     tb.Button(display, text="📤 导出为 Markdown", command=export_logs, bootstyle="info").pack(pady=10)
