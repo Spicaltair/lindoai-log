@@ -7,6 +7,11 @@ from ttkbootstrap.constants import *
 from PIL import Image, ImageTk
 from database import insert_log, get_logs_by_date, save_meta, get_meta, get_top_phrases
 from database import delete_phrase  # 确保你有这些函数
+import subprocess
+import sys
+
+def open_export_gui():
+    subprocess.Popen([sys.executable, "export_pdf_gui_styled.py"])
 
 log_id_list = []  # 用于保存每条记录的数据库 ID
 
@@ -39,7 +44,7 @@ def export_markdown_to_file(date, filepath):
 def run_ui():
     root = tb.Window(themename="cosmo")
     root.title("LindoAI Log Recorder")
-    root.geometry("880x700")
+    root.geometry("950x850")
     root.iconbitmap("lindoai.ico")
 
     # Scrollable canvas
@@ -65,7 +70,7 @@ def run_ui():
 
     today = datetime.date.today().strftime("%Y-%m-%d")
 
-    logo_img = Image.open("logo.png").resize((48, 48))
+    logo_img = Image.open("lindoai.ico").resize((48, 48))
     logo = ImageTk.PhotoImage(logo_img)
     top_frame = tk.Frame(scrollable_frame, bg="#f9fafb")
     top_frame.pack(pady=(5, 0))
@@ -129,7 +134,9 @@ def run_ui():
     tb.Combobox(meta, textvariable=weather_var, values=weather_options, width=10).grid(row=1, column=1, padx=5)
     tb.Label(meta, text="气温℃").grid(row=1, column=2)
     tb.Entry(meta, textvariable=temperature_var, width=10).grid(row=1, column=3, padx=5)
-   
+
+    tb.Button(meta, text="📤 批量导出 PDF", command=open_export_gui, bootstyle="success-outline").grid(row=1, column=6, padx=10)   
+    
     def save_meta_info():
         save_meta(
             date_var.get(),
@@ -309,7 +316,7 @@ def run_ui():
     display = tb.LabelFrame(scrollable_frame, text="今日记录(双击可编辑）", padding=10, bootstyle="default")
     display.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
     
-    tb.Button(display, text="📤 导出为 Markdown", command=export_logs, bootstyle="info").pack(pady=10)
+    tb.Button(display, text="📤 导出下面日志", command=export_logs, bootstyle="info").pack(pady=10)
     
     log_list = tk.Listbox(display, font=("Consolas", 10), bg="white")
     log_list.pack(fill=tk.BOTH, expand=True)
